@@ -101,4 +101,4 @@ Click “Predict” to generate the predicted class, which is displayed above th
 MIT License – free to use, modify, and distribute.
 
 ## References:
-  - Sole work of Michel M. Nzikou 
+  - Michel M. Nzikou, Jan 2026 @ DMN SOLUTIONS, Perth, WA, Australia 
