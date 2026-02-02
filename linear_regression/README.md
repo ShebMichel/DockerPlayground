@@ -7,6 +7,9 @@
 This project demonstrates a simple machine learning workflow: generating synthetic data, training a linear regression model, and deploying a web app using Flask inside a Docker container.
 
 ---
+## Application Preview
+
+![ML Prediction App](assets/images/ML_Prediction_App.png)
 
 ## Project Structure
 
