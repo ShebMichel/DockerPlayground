@@ -95,3 +95,8 @@ No manual POST requests or API tools are required.
 ## License
 
 MIT License – free to use, modify, and distribute.
+
+## References:
+- **Youssef H.** (Year). *Building Your First Docker Container*.  
+  https://youssefh.substack.com/p/building-your-first-docker-container
+
