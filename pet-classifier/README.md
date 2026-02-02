@@ -1,4 +1,4 @@
-# ML App with Synthetic Data and Linear Regression
+# Pet Image Classifier Web App with Pretrained Deep Learning Model
 
 ![Docker](https://img.shields.io/badge/Docker-Ready-blue)
 ![Python](https://img.shields.io/badge/Python-3.x-green)
@@ -12,7 +12,7 @@ This project showcases a complete image classification workflow using a pretrain
 ![ML Prediction App](assets/images/pet_predictor_webapp.png)
 
 ## Project Structure
-
+```
 pet-classifier/
 ├─ Dockerfile
 ├─ requirements.txt
@@ -23,10 +23,7 @@ pet-classifier/
 │  └─ static/
 └─ assets/   # your images
 
-
-<!-- - **app.py** – Main Flask application that loads the trained model and provides a web interface for testing predictions. This app is designed to run inside a Docker container.
-- **Dockerfile** – Defines the Docker image used to containerize the application.
- -->
+```
 ---
 
 ## Prerequisites
