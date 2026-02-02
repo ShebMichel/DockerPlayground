@@ -1,0 +1,16 @@
+flask
+pillow
+requests
+
+
+####
+#conda create -n petenv python=3.11
+#conda activate petting
+
+# Install PyTorch + dependencies
+#conda install pytorch torchvision torchaudio cpuonly -c pytorch
+
+# Install Flask & Pillow
+#pip install flask pillow requests
+
+

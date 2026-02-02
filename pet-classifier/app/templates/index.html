@@ -1,0 +1,19 @@
+<!-- app/templates/index.html -->
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Pet Classifier</title>
+</head>
+<body>
+    <h1>Upload a Pet Image</h1>
+    <form method="POST" enctype="multipart/form-data">
+        <input type="file" name="file" required>
+        <input type="submit" value="Predict">
+    </form>
+
+    {% if prediction %}
+        <h2>Prediction: {{ prediction }}</h2>
+        <img src="{{ filename }}" width="300">
+    {% endif %}
+</body>
+</html>
