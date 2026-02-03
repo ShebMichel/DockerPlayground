@@ -7,6 +7,9 @@ An **end-to-end machine learning project** that covers **data preprocessing, mod
 ![Streamlit](https://img.shields.io/badge/Streamlit-Web%20App-orange)
 
 ---
+## Application Preview
+
+![ML Prediction App](assets/images/house_predict.png)
 
 ## 🎯 Problem Statement
 
