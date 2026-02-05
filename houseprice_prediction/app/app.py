@@ -7,6 +7,8 @@ from sklearn.preprocessing import LabelEncoder
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import LabelEncoder
+from sklearn.ensemble import RandomForestRegressor
+from sklearn.preprocessing import StandardScaler
 import joblib
 import os
 
@@ -84,29 +86,63 @@ if uploaded_file is not None:
                     X_train, X_test, y_train, y_test = train_test_split(
                         X, y, test_size=0.2, random_state=42
                     )
-                    
-                    # Train model
-                    model = LinearRegression()
-                    model.fit(X_train, y_train)
-                    
-                    # Predictions
-                    y_pred = model.predict(X_test)
-                    
-                    # Metrics
-                    rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-                    r2 = r2_score(y_test, y_pred)
-                    
+                   # Scale the features
+                    scaler = StandardScaler()
+                    X_train_scaled = scaler.fit_transform(X_train)
+                    X_test_scaled = scaler.transform(X_test)
+
+                    # Try both models and pick the best
+                    models_to_try = {
+                        'Linear Regression': LinearRegression(),
+                        'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10)
+                    }
+
+                    best_model = None
+                    best_model_name = None
+                    best_r2 = -float('inf')
+                    results = {}
+
+                    for model_name, model in models_to_try.items():
+                        model.fit(X_train_scaled, y_train)
+                        y_pred = model.predict(X_test_scaled)
+                        r2 = r2_score(y_test, y_pred)
+                        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                        
+                        results[model_name] = {'r2': r2, 'rmse': rmse}
+                        
+                        if r2 > best_r2:
+                            best_r2 = r2
+                            best_model = model
+                            best_model_name = model_name
+                            y_pred_best = y_pred
+
+                    # Show comparison
+                    st.write("### 🔬 Model Comparison")
+                    comparison_df = pd.DataFrame(results).T
+                    st.dataframe(comparison_df.style.highlight_max(axis=0, subset=['r2']).highlight_min(axis=0, subset=['rmse']))
+
+                    st.info(f"✅ Selected Model: **{best_model_name}** (R²: {best_r2:.2f})")
+
+                    # Use best model
+                    rmse = results[best_model_name]['rmse']
+                    r2 = best_r2
+
+                    # Check if R² meets threshold
+                    if r2 < 0.95:
+                        st.warning(f"⚠️ Best model R² is {r2:.2f}, below 95% threshold. Consider improving your data.")
+
                     # Save to session state
-                    st.session_state['model'] = model
+                    st.session_state['model'] = best_model
+                    st.session_state['model_name'] = best_model_name
+                    st.session_state['scaler'] = scaler
                     st.session_state['metrics'] = {'rmse': rmse, 'r2': r2}
-                    st.session_state['feature_columns'] = feature_columns
+                    st.session_state['feature_columns'] = feature_columns  
                     st.session_state['predictions'] = pd.DataFrame({
                         'actual': y_test,
-                        'predicted': y_pred
+                        'predicted': y_pred_best
                     })
-                    
-                    st.success("✅ Model trained successfully!")
-                    st.balloons()
+                    st.success("✅ Model trained successfully!")  
+                    st.balloons() 
                     
                 except Exception as e:
                     st.error(f"Error training model: {str(e)}")
@@ -123,26 +159,13 @@ if 'metrics' in st.session_state:
 # -----------------------------
 # Prediction Section (only show if model exists)
 # -----------------------------
-if 'model' in st.session_state:
+#if 'model' in st.session_state:
+if 'model' in st.session_state and 'feature_columns' in st.session_state:
     st.subheader("🔢 Make Predictions")
     
     model = st.session_state['model']
     feature_columns = st.session_state['feature_columns']
     
-    # Create input fields dynamically based on features
-    # cols = st.columns(min(3, len(feature_columns)))
-    # input_features = []
-    
-    # for idx, feature_name in enumerate(feature_columns):
-    #     with cols[idx % 3]:
-    #         value = st.number_input(
-    #             f"{feature_name}",
-    #             min_value=0.0,
-    #             value=0.0,
-    #             step=1.0,
-    #             key=f"input_{feature_name}"
-    #         )
-    #         input_features.append(value)
     # Create input fields dynamically based on features
     cols = st.columns(min(3, len(feature_columns)))
     input_features = []
@@ -169,19 +192,24 @@ if 'model' in st.session_state:
                     key=f"input_{feature_name}"
                 )
                 input_features.append(value)
+
     if st.button("Predict Price"):
-        try:
-            features = np.array(input_features).reshape(1, -1)
-            prediction = model.predict(features)[0]
-            st.success(f"💰 Estimated Price: ${prediction:,.2f}")
-        except Exception as e:
-            st.error(f"Error making prediction: {str(e)}")
-    
+        # Check if model meets accuracy threshold
+        if st.session_state['metrics']['r2'] < 0.95:
+            st.error(f"❌ Model accuracy ({st.session_state['metrics']['r2']:.2%}) is below 95%. Please retrain with better data or features.")
+        else:
+            try:
+                features = np.array(input_features).reshape(1, -1)
+                features_scaled = st.session_state['scaler'].transform(features)  # Scale the input!
+                prediction = st.session_state['model'].predict(features_scaled)[0]
+                st.success(f"💰 Estimated Price: ${prediction:,.2f}")
+            except Exception as e:
+                st.error(f"Error making prediction: {str(e)}")
+
     # -----------------------------
     # Visualization Section
     # -----------------------------
     st.subheader("📈 Model Predictions vs Actual")
-    
     if 'predictions' in st.session_state:
         df_pred = st.session_state['predictions']
         
