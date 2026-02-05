@@ -50,8 +50,27 @@ if uploaded_file is not None:
     with col1:
         feature_columns = st.multiselect("Select Feature Columns",columns,default=columns[:-1] if len(columns) > 1 else []
         )
-    # Handle categorical variables
-    categorical_columns = df.select_dtypes(include=['object']).columns.tolist()
+        # Handle categorical variables
+        categorical_columns = df.select_dtypes(include=['object']).columns.tolist()
+        
+        # Aggressive ID column filtering
+        if feature_columns:
+            id_patterns = ['id', 'index', 'idx', 'key', 'number', 'num', '#']
+            suspicious_features = []
+            
+            for col in feature_columns:
+                col_lower = col.lower()
+                # Check if column name contains ID patterns
+                if any(pattern in col_lower for pattern in id_patterns):
+                    suspicious_features.append(col)
+                # Check if column has unique values (likely an ID)
+                elif df[col].nunique() == len(df):
+                    suspicious_features.append(col)
+            
+            if suspicious_features:
+                st.error(f"🚫 These columns look like IDs and will hurt model performance: {', '.join(suspicious_features)}")
+                st.info("Please deselect them from features!")
+
     if len(categorical_columns) > 0:
         st.info(f"📝 Categorical columns detected: {', '.join(categorical_columns)}")
         st.write("Converting categorical variables to numerical using Label Encoding...")
@@ -78,98 +97,103 @@ if uploaded_file is not None:
         elif target_column in feature_columns:
             st.error("Target column cannot be in feature columns!")
         else:
-            with st.spinner("Training model..."):
-                try:
-                    # # Prepare data
-                    # X = df[feature_columns].values
-                    # y = df[target_column].values
-                    
-                    # # Split data
-                    # X_train, X_test, y_train, y_test = train_test_split(
-                    #     X, y, test_size=0.2, random_state=42
-                    # )
-                    # Prepare data
-                    X = df[feature_columns].values
-                    y = df[target_column].values
-
-                    # Drop ID columns if they were selected as features
-                    id_like_columns = ['id', 'ID', 'i_d', 'I_D', 'index', 'idx', 'Index', 'ID_', '_id']
-                    id_cols_to_remove = [col for col in feature_columns if col.lower() in [x.lower() for x in id_like_columns]]
-
-                    if id_cols_to_remove:
-                        st.warning(f"⚠️ Removing ID-like columns from features: {', '.join(id_cols_to_remove)}")
-                        feature_columns = [col for col in feature_columns if col not in id_cols_to_remove]
+            #Auto-remove ID columns instead of stopping
+            id_columns_removed = []
+            for col in feature_columns:
+                if df[col].nunique() == len(df):
+                    id_columns_removed.append(col)
+            
+            if id_columns_removed:
+                st.warning(f"⚠️ Auto-removing ID columns: {', '.join(id_columns_removed)}")
+                feature_columns = [col for col in feature_columns if col not in id_columns_removed]
+                
+            if len(feature_columns) == 0:
+                st.error("❌ No valid features remaining after removing ID columns!")
+            else:
+                with st.spinner("Training model..."):
+                    try:
+                        # Prepare data
                         X = df[feature_columns].values
+                        y = df[target_column].values
+
+                        # Drop ID columns if they were selected as features
+                        id_like_columns = ['id', 'ID', 'i_d', 'I_D', 'index', 'idx', 'Index', 'ID_', '_id']
+                        id_cols_to_remove = [col for col in feature_columns if col.lower() in [x.lower() for x in id_like_columns]]
+
+                        if id_cols_to_remove:
+                            st.warning(f"⚠️ Removing ID-like columns from features: {', '.join(id_cols_to_remove)}")
+                            feature_columns = [col for col in feature_columns if col not in id_cols_to_remove]
+                            X = df[feature_columns].values
+                            
+                            # Update session state with cleaned features
+                            st.session_state['feature_columns'] = feature_columns
+
+                        # Split data
+                        X_train, X_test, y_train, y_test = train_test_split(
+                            X, y, test_size=0.2, random_state=42
+                        )
+                        # Scale the features
+                        scaler = StandardScaler()
+                        X_train_scaled = scaler.fit_transform(X_train)
+                        X_test_scaled = scaler.transform(X_test)
+
+                        # Try multiple models and pick the best
+                        models_to_try = {
+                            'Linear Regression': LinearRegression(),
+                            'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
+                            'XGBoost': XGBRegressor(n_estimators=100, random_state=42, max_depth=10, learning_rate=0.1),
+                            'Gradient Boosting': GradientBoostingRegressor(n_estimators=100, random_state=42, max_depth=5, learning_rate=0.1)
+                        }
+
+                        best_model = None
+                        best_model_name = None
+                        best_r2 = -float('inf')
+                        results = {}
+
+                        for model_name, model in models_to_try.items():
+                            model.fit(X_train_scaled, y_train)
+                            y_pred = model.predict(X_test_scaled)
+                            r2 = r2_score(y_test, y_pred)
+                            rmse = np.sqrt(mean_squared_error(y_test, y_pred))
+                            
+                            results[model_name] = {'r2': r2, 'rmse': rmse}
+                            
+                            if r2 > best_r2:
+                                best_r2 = r2
+                                best_model = model
+                                best_model_name = model_name
+                                y_pred_best = y_pred
+
+                        # Show comparison
+                        st.write("### 🔬 Model Comparison")
+                        comparison_df = pd.DataFrame(results).T
+                        st.dataframe(comparison_df.style.highlight_max(axis=0, subset=['r2']).highlight_min(axis=0, subset=['rmse']))
+
+                        st.info(f"✅ Selected Model: **{best_model_name}** (R²: {best_r2:.2f})")
+
+                        # Use best model
+                        rmse = results[best_model_name]['rmse']
+                        r2 = best_r2
+
+                        # Check if R² meets threshold
+                        if r2 < 0.95:
+                            st.warning(f"⚠️ Best model R² is {r2:.2f}, below 95% threshold. Consider improving your data.")
+
+                        # Save to session state
+                        st.session_state['model'] = best_model
+                        st.session_state['model_name'] = best_model_name
+                        st.session_state['scaler'] = scaler
+                        st.session_state['metrics'] = {'rmse': rmse, 'r2': r2}
+                        st.session_state['feature_columns'] = feature_columns  
+                        st.session_state['predictions'] = pd.DataFrame({
+                            'actual': y_test,
+                            'predicted': y_pred_best
+                        })
+                        st.success("✅ Model trained successfully!")  
+                        st.balloons() 
                         
-                        # Update session state with cleaned features
-                        st.session_state['feature_columns'] = feature_columns
-
-                    # Split data
-                    X_train, X_test, y_train, y_test = train_test_split(
-                        X, y, test_size=0.2, random_state=42
-                    )
-                    # Scale the features
-                    scaler = StandardScaler()
-                    X_train_scaled = scaler.fit_transform(X_train)
-                    X_test_scaled = scaler.transform(X_test)
-
-                    # Try multiple models and pick the best
-                    models_to_try = {
-                        'Linear Regression': LinearRegression(),
-                        'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
-                        'XGBoost': XGBRegressor(n_estimators=100, random_state=42, max_depth=10, learning_rate=0.1),
-                        'Gradient Boosting': GradientBoostingRegressor(n_estimators=100, random_state=42, max_depth=5, learning_rate=0.1)
-                    }
-
-                    best_model = None
-                    best_model_name = None
-                    best_r2 = -float('inf')
-                    results = {}
-
-                    for model_name, model in models_to_try.items():
-                        model.fit(X_train_scaled, y_train)
-                        y_pred = model.predict(X_test_scaled)
-                        r2 = r2_score(y_test, y_pred)
-                        rmse = np.sqrt(mean_squared_error(y_test, y_pred))
-                        
-                        results[model_name] = {'r2': r2, 'rmse': rmse}
-                        
-                        if r2 > best_r2:
-                            best_r2 = r2
-                            best_model = model
-                            best_model_name = model_name
-                            y_pred_best = y_pred
-
-                    # Show comparison
-                    st.write("### 🔬 Model Comparison")
-                    comparison_df = pd.DataFrame(results).T
-                    st.dataframe(comparison_df.style.highlight_max(axis=0, subset=['r2']).highlight_min(axis=0, subset=['rmse']))
-
-                    st.info(f"✅ Selected Model: **{best_model_name}** (R²: {best_r2:.2f})")
-
-                    # Use best model
-                    rmse = results[best_model_name]['rmse']
-                    r2 = best_r2
-
-                    # Check if R² meets threshold
-                    if r2 < 0.95:
-                        st.warning(f"⚠️ Best model R² is {r2:.2f}, below 95% threshold. Consider improving your data.")
-
-                    # Save to session state
-                    st.session_state['model'] = best_model
-                    st.session_state['model_name'] = best_model_name
-                    st.session_state['scaler'] = scaler
-                    st.session_state['metrics'] = {'rmse': rmse, 'r2': r2}
-                    st.session_state['feature_columns'] = feature_columns  
-                    st.session_state['predictions'] = pd.DataFrame({
-                        'actual': y_test,
-                        'predicted': y_pred_best
-                    })
-                    st.success("✅ Model trained successfully!")  
-                    st.balloons() 
-                    
-                except Exception as e:
-                    st.error(f"Error training model: {str(e)}")
+                    except Exception as e:
+                        st.error(f"Error training model: {str(e)}")
 
 # -----------------------------
 # Model Performance (only show if model exists)
