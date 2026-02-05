@@ -9,6 +9,8 @@ from sklearn.metrics import mean_squared_error, r2_score
 from sklearn.preprocessing import LabelEncoder
 from sklearn.ensemble import RandomForestRegressor
 from sklearn.preprocessing import StandardScaler
+from xgboost import XGBRegressor
+from sklearn.ensemble import GradientBoostingRegressor
 import joblib
 import os
 
@@ -78,23 +80,45 @@ if uploaded_file is not None:
         else:
             with st.spinner("Training model..."):
                 try:
+                    # # Prepare data
+                    # X = df[feature_columns].values
+                    # y = df[target_column].values
+                    
+                    # # Split data
+                    # X_train, X_test, y_train, y_test = train_test_split(
+                    #     X, y, test_size=0.2, random_state=42
+                    # )
                     # Prepare data
                     X = df[feature_columns].values
                     y = df[target_column].values
-                    
+
+                    # Drop ID columns if they were selected as features
+                    id_like_columns = ['id', 'ID', 'i_d', 'I_D', 'index', 'idx', 'Index', 'ID_', '_id']
+                    id_cols_to_remove = [col for col in feature_columns if col.lower() in [x.lower() for x in id_like_columns]]
+
+                    if id_cols_to_remove:
+                        st.warning(f"⚠️ Removing ID-like columns from features: {', '.join(id_cols_to_remove)}")
+                        feature_columns = [col for col in feature_columns if col not in id_cols_to_remove]
+                        X = df[feature_columns].values
+                        
+                        # Update session state with cleaned features
+                        st.session_state['feature_columns'] = feature_columns
+
                     # Split data
                     X_train, X_test, y_train, y_test = train_test_split(
                         X, y, test_size=0.2, random_state=42
                     )
-                   # Scale the features
+                    # Scale the features
                     scaler = StandardScaler()
                     X_train_scaled = scaler.fit_transform(X_train)
                     X_test_scaled = scaler.transform(X_test)
 
-                    # Try both models and pick the best
+                    # Try multiple models and pick the best
                     models_to_try = {
                         'Linear Regression': LinearRegression(),
-                        'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10)
+                        'Random Forest': RandomForestRegressor(n_estimators=100, random_state=42, max_depth=10),
+                        'XGBoost': XGBRegressor(n_estimators=100, random_state=42, max_depth=10, learning_rate=0.1),
+                        'Gradient Boosting': GradientBoostingRegressor(n_estimators=100, random_state=42, max_depth=5, learning_rate=0.1)
                     }
 
                     best_model = None
